@@ -137,7 +137,7 @@ export class Game {
 				}
 			}
 		}
-		if(this.current_map_index == -1 && e.code == "KeyE") this.advance_map(3);
+		if(this.current_map_index == -1 && e.code == "KeyE") this.advance_map(0);
 		if(e.code == "KeyR") this.advance_map(this.current_map_index);
 	}
 	private keyup(e : KeyboardEvent) : void {
