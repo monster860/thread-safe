@@ -67,21 +67,30 @@ export class MapObject {
 export class SwitchObject extends MapObject {
 	is_on = false;
 	facing_right = false;
+	floored = false;
 	target_tag = "";
 	constructor(x:number, y:number, properties?:TiledProperty[]) {
 		super(x, y, properties);
 		this.facing_right = this.bool_property(this.facing_right, "facing_right");
+		this.floored = this.bool_property(this.floored, "floored");
 		this.target_tag = this.string_property(this.target_tag, "target_tag");
 		this.is_on = this.bool_property(false, "is_on");
 		this.update_tagged(true);
 	}
 
 	draw(ctx : CanvasRenderingContext2D) : void {
-		let sx = 0;
-		let sy = 64;
-		if(this.is_on) sy += 32;
-		if(this.facing_right) sx += 16;
-		ctx.drawImage(game_instance.tileset_image, sx, sy, 16, 32, this.x - (this.facing_right ? 0 : 16), this.y - 32, 16, 32);
+		if(this.floored) {
+			let sx = 0;
+			let sy = 128;
+			if(this.is_on) sy += 16;
+			ctx.drawImage(game_instance.tileset_image, sx, sy, 32, 16, this.x - 16, this.y - 16, 32, 16);
+		} else {
+			let sx = 0;
+			let sy = 64;
+			if(this.is_on) sy += 32;
+			if(this.facing_right) sx += 16;
+			ctx.drawImage(game_instance.tileset_image, sx, sy, 16, 32, this.x - (this.facing_right ? 0 : 16), this.y - 32, 16, 32);
+		}
 		if(game_instance.player && !game_instance.player.is_werewolf && this.in_interact_range(game_instance.player.x, game_instance.player.y)) this.draw_interact_icon(ctx, this.x, this.y-32);
 	}
 

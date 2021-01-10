@@ -8,5 +8,5 @@ export const maps_list : TiledMap[] = [
 	testmap,
 	level3,
 	level2,
-	//level4
+	level4
 ];
