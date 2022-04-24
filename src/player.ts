@@ -199,9 +199,20 @@ export class PlayerObject extends PhysicsObject {
 		this.last_endx = prev_x;
 		this.last_endy = prev_y;
 
-		game_instance.audio_ctx.listener.positionX.value = this.x * game_instance.audio_scale;
-		game_instance.audio_ctx.listener.positionY.value = -this.y * game_instance.audio_scale;
-		game_instance.audio_ctx.listener.positionZ.value = 10;
+		let audio_position = [
+			this.x * game_instance.audio_scale,
+			-this.y * game_instance.audio_scale,
+			10
+		] as const;
+		
+		if(game_instance.audio_ctx.listener.positionX != undefined) {
+			game_instance.audio_ctx.listener.positionX.value = audio_position[0];
+			game_instance.audio_ctx.listener.positionY.value = audio_position[1];
+			game_instance.audio_ctx.listener.positionZ.value = audio_position[2];
+		} else if(game_instance.audio_ctx.listener.setPosition) {
+			// ffs firefox
+			game_instance.audio_ctx.listener.setPosition(...audio_position);
+		}
 
 		super.simulate(dt);
 	}
