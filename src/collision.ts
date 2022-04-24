@@ -10,6 +10,7 @@ const WALL_DEPTH = 16;
 
 export class Line {
 	x1 : number; y1 : number; x2 : number; y2 : number;
+	vx1=0; vy1=0; vx2=0; vy2=0;
 	constructor(x1:number, y1:number, x2:number, y2:number) {
 		this.x1=x1; this.y1=y1; this.x2=x2; this.y2=y2;
 	}
@@ -18,7 +19,7 @@ export class Line {
 		let rls = dx*dx+dy*dy;
 		let d1 = (-dy*(this.x1-x) + dx*(this.y1-y));
 		let d2 = (-dy*(this.x2-x) + dx*(this.y2-y));
-		if(d2 >= 0 && d1 <= 0 && d2 != d1) {
+		if((d2 >= 0 != d1 >= 0) && d2 != d1) {
 			let l1 = (dx*(this.x1-x) + dy*(this.y1-y));
 			let l2 = (dx*(this.x2-x) + dy*(this.y2-y));
 			let slope = (l2-l1)/(d2-d1);
@@ -27,6 +28,15 @@ export class Line {
 		}
 		return null;
 	}
+
+	point_velocity(x:number, y:number) : [number,number] {
+		let mag_squared = (this.x2-this.x1)**2 + (this.y2-this.y1)**2;
+		let fac = ((x-this.x1)*(this.x2-this.x1) + (y-this.y1)*(this.y2-this.y1)) / mag_squared;
+		return [
+			this.vx1*(1-fac) + this.vx2*fac,
+			this.vy1*(1-fac) + this.vy2*fac
+		];
+	}
 }
 
 export class PhysicsObject extends MapObject {
@@ -34,8 +44,9 @@ export class PhysicsObject extends MapObject {
 
 	velocity_x : number = 0;
 	velocity_y : number = 0;
+	ground_friction_enabled = true;
 
-	touching_floor : boolean = false;
+	touching_floor : Line|null = null;
 	constructor(x = 0, y = 0, properties? : TiledProperty[], bound_x = 0, bound_y = 0, bound_width = 32, bound_height = 32) {
 		super(x, y, properties)
 		this.bound_width=bound_width;
@@ -49,7 +60,7 @@ export class PhysicsObject extends MapObject {
 		this.y += this.velocity_y*dt + (GRAVITY * 0.5 * dt * dt);
 		this.velocity_y += GRAVITY * dt;
 
-		this.touching_floor = false;
+		this.touching_floor = null;
 		let normal_impulse = 0;
 		for(let line of game_instance.lines) {
 			if(line.x2 >= line.x1) continue;
@@ -69,9 +80,12 @@ export class PhysicsObject extends MapObject {
 				is_top = true;
 			}
 			if(py >= fy && py <= fy+STEP_HEIGHT) {
-				this.touching_floor = true;
+				this.touching_floor = line;
 				this.y += fy-py;
 
+				let [pvx, pvy] = line.point_velocity(this.x, this.y);
+				this.velocity_x -= pvx;
+				this.velocity_y -= pvy;
 				if(is_top) {
 					normal_impulse = Math.abs(this.velocity_y);
 					this.velocity_y = 0;
@@ -91,13 +105,20 @@ export class PhysicsObject extends MapObject {
 					let v_dy = this.velocity_y - ovy;
 					normal_impulse += Math.sqrt(v_dx*v_dx+v_dy*v_dy);
 				}
+				this.velocity_x += pvx;
+				this.velocity_y += pvy;
 			}
 		}
-		if(this.touching_floor && (this.velocity_x != 0 || this.velocity_y != 0)) {
+		if(this.touching_floor && (this.velocity_x != 0 || this.velocity_y != 0) && this.ground_friction_enabled) {
+			let [pvx, pvy] = this.touching_floor.point_velocity(this.x, this.y);
+			this.velocity_x -= pvx;
+			this.velocity_y -= pvy;
 			let total = Math.sqrt(this.velocity_x*this.velocity_x + this.velocity_y*this.velocity_y);
 			let fac = 1 - Math.min(1, normal_impulse * FLOOR_FRICTION_COEFF / total);
 			this.velocity_x *= fac;
 			this.velocity_y *= fac;
+			this.velocity_x += pvx;
+			this.velocity_y += pvy;
 		}
 
 		let line_penetrations : Array<[Line, number]> = [];
@@ -138,20 +159,31 @@ export class PhysicsObject extends MapObject {
 			nx *= inv_length;
 			ny *= inv_length;
 			let penetration = -1;
+			let touch_x = this.x;
+			let touch_y = this.y;
 			for(let cx = 0; cx < 2; cx++) for(let cy = 0; cy < 2; cy++) {
 				let px = this.x+this.bound_x+this.bound_width*cx;
 				let py = this.y+this.bound_y+this.bound_height*cy;
 				let pdx = px - line.x1;
 				let pdy = py - line.y1;
 				let this_penetration = -(pdx*nx + pdy*ny);
-				if(this_penetration >= 0 && this_penetration > penetration) penetration = this_penetration;
+				if(this_penetration >= 0 && this_penetration > penetration) {
+					penetration = this_penetration;
+					touch_x = px;
+					touch_y = py;
+				}
 			}
-			if(penetration >= 0 && penetration <= WALL_DEPTH) {
+			if(penetration >= 0 && penetration <= WALL_DEPTH) {	
+				let [pvx, pvy] = line.point_velocity(touch_x, touch_y);
+				this.velocity_x -= pvx;
+				this.velocity_y -= pvy;
 				this.x += penetration * nx;
 				this.y += penetration * ny;
 				let normal_vel = this.velocity_x*nx + this.velocity_y*ny;
 				this.velocity_x -= normal_vel * nx;
 				this.velocity_y -= normal_vel * ny;
+				this.velocity_x += pvx;
+				this.velocity_y += pvy;
 			}
 		}
 	}

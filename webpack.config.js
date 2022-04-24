@@ -19,7 +19,7 @@ module.exports = {
 		extensions: ['.ts', '.js']
 	},
 	devServer: {
-		port: 17933,
+		port: 17934,
 		contentBase: './res'
 	},
 	mode: 'development',
