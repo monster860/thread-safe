@@ -40,26 +40,60 @@ export class Game {
 	star_map = new Map<string, string>();
 	tile_rand : Map<string, number> = new Map();
 
+	nya_tokens : Map<string, boolean> = new Map();
+
 	collision_display = false;
 	grass_level = 4;
 
 	fade_overlay : HTMLDivElement;
 
+	audio : HTMLAudioElement;
+	target_music = "meh.ogg";
+	curr_music = "meh.ogg";
+	music_fade = 1;
+	end_nya_token_count = 0;
+
 	constructor() {
 		this.canvas = document.createElement("canvas");
 		this.fade_overlay = document.createElement("div");
+		this.audio = document.createElement("audio");
 		this.tileset_image.src = "tileset.png";
 		this.moon_image.src = "moon.png";
 		this.title_image.src = "title.png";
 		window.addEventListener("DOMContentLoaded", this.dom_content_loaded.bind(this));
+
+		for(let [index, map] of maps_list.entries()) {
+			for(let layer of map.layers) {
+				if(layer.name == "Objects" && layer.objects) {
+					for(let object of layer.objects) {
+						if(object.type == "bonus_coin") {
+							this.nya_tokens.set(`${index}-${object.x}-${object.y}`, false);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	advance_map(target? : number) : void {
 		if(this.next_map_index) return;
 		if(target == undefined) {
+			for(let object of this.objects) {
+				if(object instanceof BonusCoinObject && object.picked_up) {
+					let id = `${this.current_map_index}-${object.x}-${object.y}`;
+					if(!this.nya_tokens.has(id)) console.error("Unknown nya token " + id);
+					this.nya_tokens.set(`${this.current_map_index}-${object.x}-${object.y}`, true);
+				}
+			}
 			if(maps_list.length > this.current_map_index+1) {
 				target = this.current_map_index+1;
 			} else {
+				this.end_nya_token_count = 0;
+				for(let token of this.nya_tokens.values()) {
+					if(token) this.end_nya_token_count++;
+				}
+
+				this.target_music = "";
 				target = -2;
 			}
 		}
@@ -145,6 +179,22 @@ export class Game {
 			this.next_map_fade = Math.max(this.next_map_fade - dt*3, 0);
 		}
 		this.fade_overlay.style.opacity = ""+this.next_map_fade;
+		if(this.target_music != this.curr_music) {
+			this.music_fade -= dt;
+			if(this.music_fade <= 0) {
+				this.music_fade = 1;
+				this.curr_music = this.target_music;
+				if(this.curr_music != null) {
+					this.audio.src = this.target_music;
+					this.audio.currentTime = 0;
+					this.audio.play();
+				} else {
+					this.audio.currentTime = 0;
+					this.audio.pause();
+				}
+			}
+		}
+		this.audio.volume = this.music_fade;
 		for(let object of this.objects) object.simulate(dt);
 	}
 
@@ -166,7 +216,10 @@ export class Game {
 				}
 			}
 		}
-		if(this.current_map_index == -1 && e.code == "KeyE") this.advance_map(0);
+		if(this.current_map_index == -1 && e.code == "KeyE") {
+			this.audio.play();
+			this.advance_map(0);
+		}
 		if(e.code == "KeyR") this.advance_map(this.current_map_index);
 	}
 	private keyup(e : KeyboardEvent) : void {
@@ -299,13 +352,26 @@ export class Game {
 		}
 
 		if(this.current_map_index == -2) {
+			let token_text = "Now get all the nya tokens";
+			if(this.end_nya_token_count >= this.nya_tokens.size) {
+				token_text = "Congratulations on getting all the nya tokens!";
+			} else if(this.end_nya_token_count > 0) {
+				token_text = "Now get the rest of the nya tokens";
+			}
 			ctx.fillStyle = "white";
-			ctx.font = "Verdana 60px";
+			ctx.font = "30px Verdana";
 			ctx.textAlign = "center";
 			ctx.textBaseline = "middle";
 			ctx.fillText("You reached the end of the game", c.width/2/2, c.height/2/2);
-			ctx.font = "Verdana 30px";
-			ctx.fillText("Yeee", c.width/2/2, c.height/2/2 + 60);
+
+			ctx.font = "20px Verdana";
+			ctx.fillText(token_text, c.width/2/2, c.height/2/2 + 60);
+
+			let collect_text = `${this.end_nya_token_count} / ${this.nya_tokens.size}`;
+			let measurement = ctx.measureText(collect_text);
+			measurement.width;
+			ctx.fillText(collect_text, c.width/2/2 + 20, c.height/2/2 + 92);
+			ctx.drawImage(game_instance.tileset_image, 32, 160, 32, 32, c.width/2/2 - measurement.width/2 - 20, c.height/2/2 + 92 - 16, 32, 32);
 
 		} else if(this.current_map_index == -1) {
 			ctx.imageSmoothingEnabled = true;
@@ -327,8 +393,8 @@ export class Game {
 			ctx.font = "30px Verdana";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
-			ctx.fillText(`Thread length: ${this.player.thread_length.toFixed(1)}`, 30, 15);
-			ctx.fillText(`${this.player.x|0},${this.player.y|0}`, 30, 45);
+			ctx.fillText(`Thread length: ${this.player.thread_length.toFixed(1)} / ${this.player.thread_limit.toFixed(1)}`, 30, 15);
+			if(this.debug_enabled) ctx.fillText(`${this.player.x|0},${this.player.y|0}`, 30, 45);
 		}
 	}
 
@@ -338,6 +404,11 @@ export class Game {
 		this.canvas.id = "the_canvas";
 		document.body.appendChild(this.fade_overlay);
 		this.fade_overlay.id = "fade_overlay";
+
+		document.body.appendChild(this.audio);
+		this.audio.src = this.target_music;
+		this.curr_music = this.target_music;
+		this.audio.loop = true;
 
 		document.addEventListener("keydown", this.keydown.bind(this));
 		document.addEventListener("keyup", this.keyup.bind(this));
